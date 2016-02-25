@@ -1,0 +1,297 @@
+// <tuple_utility> -*- C++ -*-
+// The MIT License (MIT)
+//
+// Copyright (c) 2016 Jeremy Letang
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+#ifndef __TUPLE_UTILITY__20160251151__
+#define __TUPLE_UTILITY__20160251151__
+
+#include <tuple>
+#include <type_traits>
+#include <utility>
+
+namespace tuple_utility {
+namespace traits {
+
+// map_result_helper
+
+template <typename Fn, typename... T>
+struct map_result_helper {
+    using type = std::tuple<decltype(std::declval<Fn>()(std::declval<T>()))...>;
+};
+
+template <typename Fn, typename... T>
+using map_result_helper_t = typename map_result_helper<Fn, T...>::type;
+
+// is_tuple
+
+template <typename T>
+struct is_tuple : std::false_type {};
+
+template <typename... T>
+struct is_tuple<std::tuple<T...>> : std::true_type {
+    using type = std::tuple<T...>;
+};
+
+template <typename T>
+constexpr bool is_tuple_v = is_tuple<T>::value;
+
+// tuple_hd
+
+template <typename T>
+struct tuple_hd;
+
+template <typename Head, typename... Tail>
+struct tuple_hd<std::tuple<Head, Tail...>> {
+    using type = Head;
+};
+
+template <typename T>
+using tuple_hd_t = typename tuple_hd<T>::type;
+
+// tuple_tl
+
+template <typename T>
+struct tuple_tl;
+
+template <typename Head, typename... Tail>
+struct tuple_tl<std::tuple<Head, Tail...>> {
+    using type = std::tuple<Tail...>;
+};
+
+template <typename T>
+using tuple_tl_t = typename tuple_tl<T>::type;
+
+// tuple_concat
+
+template <typename T, typename ToConcat> struct tuple_concat_one;
+template <typename T1, typename T2> struct tuple_concat_tuple;
+
+
+template <typename T1, typename T2, typename Void = void>
+struct tuple_concat {
+    using type = typename tuple_concat_one<T1, T2>::type;
+};
+
+template <typename T1, typename T2>
+struct tuple_concat<T1, T2, typename std::enable_if_t<is_tuple_v<T1>>> {
+    using type = typename tuple_concat_tuple<T1, T2>::type;
+};
+
+template <typename T1, typename T2>
+using tuple_concat_t = typename tuple_concat<T1, T2>::type; 
+
+// tuple_concat_tuple
+
+template <typename T1> struct tuple_rev_helper;
+template <typename T1, typename T2, std::size_t N> struct tuple_concat_tuple_priv;
+
+
+template <typename T1, typename T2>
+struct tuple_concat_tuple {
+    using type = typename tuple_concat_tuple_priv<
+        typename tuple_rev_helper<T1>::type,
+        T2,
+        std::tuple_size<T1>::value
+    >::type;
+};
+
+template <typename T1, typename T2, std::size_t N>
+struct tuple_concat_tuple_priv {
+    using type = typename tuple_concat_tuple_priv<
+        typename tuple_tl<T1>::type,
+        typename tuple_concat_one<typename tuple_hd<T1>::type, T2>::type,
+        N-1
+    >::type;
+};
+
+template <typename T1, typename T2>
+struct tuple_concat_tuple_priv<T1, T2, 0> {
+    using type = T2;
+};
+
+template <typename T1, typename T2>
+using tuple_concat_tuple_t = typename tuple_concat_tuple<T1, T2>::type; 
+
+// tuple_concat_one
+
+template <typename T, typename... ToConcat>
+struct tuple_concat_one<T, std::tuple<ToConcat...>> {
+    using type = std::tuple<T, ToConcat...>;
+};
+
+template <typename T>
+struct tuple_concat_one<T, std::tuple<>> {
+    using type = std::tuple<T>;
+};
+
+template <typename T, typename ToConcat>
+using tuple_concat_one_t = typename tuple_concat_one<T, ToConcat>::type;
+
+// tuple_rev_helper
+
+template <typename T1, typename T2, std::size_t N>
+struct tuple_rev_helper_priv {
+    using type = typename tuple_rev_helper_priv<
+        tuple_tl_t<T1>,
+        typename tuple_concat<typename tuple_hd<T1>::type, T2>::type,
+        N-1
+    >::type;
+
+};
+
+template <typename T>
+struct tuple_rev_helper {
+    using type = typename tuple_rev_helper_priv<
+        T,
+        std::tuple<>,
+        std::tuple_size<T>::value
+    >::type;
+};
+
+template <typename T>
+using tuple_rev_helper_t = typename tuple_rev_helper<T>::type;
+
+
+template <typename T1, typename T2>
+struct tuple_rev_helper_priv<T1, T2, 0> {
+    using type = T2;
+};
+
+} // traits
+
+namespace detail {
+
+template <typename Fn, typename T, std::size_t N>
+struct iter_ {
+    static void apply(Fn f, const T& t) {
+        iter_<Fn, T, N-1>::apply(f, t); 
+        f(std::get<N>(t));
+    }
+};
+
+template <typename Fn, typename T>
+struct iter_<Fn, T, 0> {
+    static  void apply(Fn f, const T& t) {
+        f(std::get<0>(t));
+    }
+};
+
+template <typename Fn, typename T, typename O, std::size_t N>
+struct map_ {
+    static O& apply(Fn f, const T& t, O& o) {
+        map_<Fn, T, O, N-1>::apply(f, t, o); 
+        std::get<N>(o) = f(std::get<N>(t));
+        return o;
+    }
+};
+
+template <typename Fn, typename T, typename O>
+struct map_<Fn, T, O, 0> {
+    static  O& apply(Fn f, const T& t, O& o) {
+        std::get<0>(o) = f(std::get<0>(t));
+        return o;
+    }
+};
+
+template <typename T, typename O, std::size_t N>
+struct rev_ {
+    static O& apply(const T& t, O& o) {
+        rev_<T, O, N-1>::apply(t, o); 
+        std::get<(std::tuple_size<O>::value - 1) - N>(o) = std::get<N>(t);
+        return o;
+    }
+};
+
+template <typename T, typename O>
+struct rev_<T, O, 0> {
+    static  O& apply(const T& t, O& o) {
+        std::get<std::tuple_size<O>::value - 1>(o) = std::get<0>(t);
+        return o;
+    }
+};
+
+
+} // detail
+
+template <typename Fn, typename... T>
+void iter(const std::tuple<T...>& t, Fn f) {
+    detail::iter_<Fn,
+                  std::tuple<T...>,
+                  std::tuple_size<std::tuple<T...>>::value - 1
+                 >::apply(f, t);
+}
+
+template <typename Fn, typename... T>
+traits::map_result_helper_t<Fn, T...> map(const std::tuple<T...>& t, Fn f) {
+    traits::map_result_helper_t<Fn, T...> out;
+    return detail::map_<Fn,
+                        std::tuple<T...>,
+                        decltype(out),
+                        std::tuple_size<std::tuple<T...>>::value -1
+                       >::apply(f, t, out);
+}
+
+template <typename Fn, typename... T>
+bool for_all(const std::tuple<T...>& t, Fn f) {
+    auto rv = true;
+    auto f2 = [&rv, &f](const auto& e) { rv = rv && f(e); };
+    detail::iter_<decltype(f2),
+                  std::tuple<T...>,
+                  std::tuple_size<std::tuple<T...>>::value - 1
+                 >::apply(f2, t);
+    return rv;
+}
+
+template <typename Fn, typename... T>
+bool exists(const std::tuple<T...>& t, Fn f) {
+    auto rv = false;
+    auto f2 = [&rv, &f](const auto& e) { rv = rv || f(e); };
+    detail::iter_<decltype(f2),
+                  std::tuple<T...>,
+                  std::tuple_size<std::tuple<T...>>::value - 1
+                 >::apply(f2, t);
+    return rv;
+}
+
+template <typename A, typename... T>
+bool mem(const std::tuple<T...>& t, A a) {
+    auto rv = false;
+    auto f = [&rv, &a](const auto& e) { rv = rv || (a == e); };
+    detail::iter_<decltype(f),
+                  std::tuple<T...>,
+                  std::tuple_size<std::tuple<T...>>::value - 1
+                 >::apply(f, t);
+    return rv;
+}
+
+template <typename... T>
+traits::tuple_rev_helper_t<std::tuple<T...>> rev(const std::tuple<T...>& t) {
+    traits::tuple_rev_helper_t<std::tuple<T...>> o;
+    return detail::rev_<std::tuple<T...>,
+                        traits::tuple_rev_helper_t<std::tuple<T...>>,
+                        std::tuple_size<std::tuple<T...>>::value - 1
+                       >::apply(t, o);
+}
+
+} // tuple_utility
+
+#endif // __TUPLE_UTILITY__20160251151__

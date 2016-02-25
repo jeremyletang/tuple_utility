@@ -1,2 +1,2 @@
 # tuple_utility
-Type traits and fonction to work with tuples
+Type traits and fonctions to work with tuples
