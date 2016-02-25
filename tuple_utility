@@ -180,6 +180,8 @@ struct tuple_rev_helper_priv<T1, T2, 0> {
 
 namespace detail {
 
+// iter
+
 template <typename Fn, typename T, std::size_t N>
 struct iter_ {
     static void apply(Fn f, const T& t) {
@@ -194,6 +196,25 @@ struct iter_<Fn, T, 0> {
         f(std::get<0>(t));
     }
 };
+
+// iteri
+
+template <typename Fn, typename T, std::size_t N>
+struct iteri_ {
+    static void apply(Fn f, const T& t) {
+        iteri_<Fn, T, N-1>::apply(f, t); 
+        f(N, std::get<N>(t));
+    }
+};
+
+template <typename Fn, typename T>
+struct iteri_<Fn, T, 0> {
+    static  void apply(Fn f, const T& t) {
+        f(0, std::get<0>(t));
+    }
+};
+
+// map
 
 template <typename Fn, typename T, typename O, std::size_t N>
 struct map_ {
@@ -211,6 +232,27 @@ struct map_<Fn, T, O, 0> {
         return o;
     }
 };
+
+// mapi
+
+template <typename Fn, typename T, typename O, std::size_t N>
+struct mapi_ {
+    static O& apply(Fn f, const T& t, O& o) {
+        mapi_<Fn, T, O, N-1>::apply(f, t, o); 
+        std::get<N>(o) = f(N, std::get<N>(t));
+        return o;
+    }
+};
+
+template <typename Fn, typename T, typename O>
+struct mapi_<Fn, T, O, 0> {
+    static  O& apply(Fn f, const T& t, O& o) {
+        std::get<0>(o) = f(0, std::get<0>(t));
+        return o;
+    }
+};
+
+// rev
 
 template <typename T, typename O, std::size_t N>
 struct rev_ {
@@ -241,6 +283,14 @@ void iter(const std::tuple<T...>& t, Fn f) {
 }
 
 template <typename Fn, typename... T>
+void iteri(const std::tuple<T...>& t, Fn f) {
+    detail::iteri_<Fn,
+                   std::tuple<T...>,
+                   std::tuple_size<std::tuple<T...>>::value - 1
+                  >::apply(f, t);
+}
+
+template <typename Fn, typename... T>
 traits::map_result_helper_t<Fn, T...> map(const std::tuple<T...>& t, Fn f) {
     traits::map_result_helper_t<Fn, T...> out;
     return detail::map_<Fn,
@@ -248,6 +298,16 @@ traits::map_result_helper_t<Fn, T...> map(const std::tuple<T...>& t, Fn f) {
                         decltype(out),
                         std::tuple_size<std::tuple<T...>>::value -1
                        >::apply(f, t, out);
+}
+
+template <typename Fn, typename... T>
+traits::map_result_helper_t<Fn, T...> mapi(const std::tuple<T...>& t, Fn f) {
+    traits::map_result_helper_t<Fn, T...> out;
+    return detail::mapi_<Fn,
+                         std::tuple<T...>,
+                         decltype(out),
+                         std::tuple_size<std::tuple<T...>>::value -1
+                        >::apply(f, t, out);
 }
 
 template <typename Fn, typename... T>
