@@ -352,6 +352,17 @@ traits::tuple_rev_helper_t<std::tuple<T...>> rev(const std::tuple<T...>& t) {
                        >::apply(t, o);
 }
 
+template <typename... T, typename Fn>
+auto rev_map(const std::tuple<T...>& t, Fn f)
+-> traits::tuple_rev_helper_t<decltype(map(t, f))> {
+    auto o1 = map(t, f);
+    traits::tuple_rev_helper_t<decltype(o1)> o2;
+    return detail::rev_<decltype(o1),
+                        traits::tuple_rev_helper_t<decltype(o1)>,
+                        std::tuple_size<decltype(o1)>::value - 1
+                       >::apply(o1, o2);
+}
+
 } // tuple_utility
 
 #endif // __TUPLE_UTILITY__20160251151__
